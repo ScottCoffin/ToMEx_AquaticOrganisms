@@ -785,9 +785,14 @@ names <- tomex2.0_aoc_setup %>%
 
 #Select columns from each data frame
 tomex2.0_aoc_setup <- tomex2.0_aoc_setup %>%
-  select(all_of(names))
+  select(all_of(names)) %>% 
+  #ToMEx 2.0 templates do not report mouth sizes; flag used below to keep reported values
+  mutate(mouth.size.reported = FALSE)
 
 aoc_setup <- aoc_setup %>%
+  #ToMEx 1.0 mouth sizes are either reported (Koelmans et al. 2020) or estimated from body length
+  mutate(mouth.size.reported = max.size.ingest.reported.estimated %in% "reported" &
+           !is.na(max.size.ingest.mm)) %>% 
   mutate(sample.size = as.character(sample.size)) %>% 
   mutate(replicates = as.character(replicates)) %>% 
   mutate(media.sal.ppt = as.character(media.sal.ppt)) %>% 
@@ -810,7 +815,7 @@ aoc_setup$doi <- gsub('doi.org/','',aoc_setup$doi)
 aoc_setup$doi <- gsub('https://','',aoc_setup$doi)
 
 aoc_setup <- aoc_setup %>%
-  select(all_of(names)) #If this throws an error, aoc_setup doesn't have all the column names as tomex2.0 df
+  select(all_of(c(names, "mouth.size.reported", "max.size.ingest.mm"))) #If this throws an error, aoc_setup doesn't have all the column names as tomex2.0 df
 
 #Join rows
 tomex2.0_aoc_setup_final <- bind_rows(aoc_setup, tomex2.0_aoc_setup) %>% 
@@ -854,10 +859,8 @@ tomex2.0_aoc_setup_final <- tomex2.0_aoc_setup_final %>%
   select(-c(body.length.cm.y, body.length.cm.x)) %>% 
   #if tomex2 already has a body length source, keep that one, otherwise replace with an add-on value
   mutate(body.size.source = ifelse(is.na(body.size.source.x), body.size.source.y, body.size.source.x)) %>% 
-  select(-c(body.size.source.y, body.size.source.x)) %>% 
-  #calculate maximum ingestible size
-  mutate(max.size.ingest.mm = 10^(0.9341 * log10(body.length.cm * 10) - 1.1200)) %>% #(Jamm et al 2020 Nature paper)correction for cm to mm
-  mutate(max.size.ingest.um = 1000 * max.size.ingest.mm)
+  select(-c(body.size.source.y, body.size.source.x))
+#(maximum ingestible size is assigned after life stages are harmonized, below)
 
 ####### Fix missing polymer densities in both TOMEX1 and TOMEX2 ####
 #Identify unique Polymers with NA values in density.g.cm3
@@ -904,6 +907,29 @@ tomex2.0_aoc_setup_final$life_f =
                "juvenile" = "Juvenile")
 
 tomex2.0_aoc_setup_final$life_f = fct_na_value_to_level(tomex2.0_aoc_setup_final$life_f, "Not Reported")
+
+#### Maximum ingestible size (mouth size) ####
+#Use a reported value whenever there is one: the record's own, else one reported for the
+#same species / life stage (ToMEx 1.0 / Koelmans et al. 2020). Only when none is reported,
+#estimate it from body length (Jams et al. 2020):
+#log10(mouth, mm) = 0.9341 * log10(body length, mm) - 1.12
+#Previously every value was recomputed from body length, which overwrote the reported
+#ToMEx 1.0 mouth sizes for 13 species / life stages (e.g., Danio rerio 0.4 mm -> 1.53 mm).
+reported_gape <- tomex2.0_aoc_setup_final %>% 
+  filter(mouth.size.reported) %>% 
+  group_by(species_f, life_f) %>% 
+  summarise(max.size.ingest.mm.reported = first(max.size.ingest.mm), .groups = "drop")
+
+tomex2.0_aoc_setup_final <- tomex2.0_aoc_setup_final %>% 
+  left_join(reported_gape, by = c("species_f", "life_f")) %>% 
+  mutate(max.size.ingest.mm = case_when(
+           mouth.size.reported ~ max.size.ingest.mm, #reported for this record
+           !is.na(max.size.ingest.mm.reported) ~ max.size.ingest.mm.reported, #reported for species / life stage
+           !is.na(body.length.cm) & body.length.cm > 0 ~
+             10^(0.9341 * log10(body.length.cm * 10) - 1.1200), #estimated (cm to mm)
+           TRUE ~ NA_real_),
+         max.size.ingest.um = 1000 * max.size.ingest.mm) %>% 
+  select(-c(max.size.ingest.mm.reported, mouth.size.reported))
 
 #sex
 tomex2.0_aoc_setup_final$sex = fct_collapse(tomex2.0_aoc_setup_final$sex,
