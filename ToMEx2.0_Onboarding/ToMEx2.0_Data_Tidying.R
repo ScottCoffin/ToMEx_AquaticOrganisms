@@ -8,6 +8,7 @@ library(tidyverse)
 library(readr)
 
 source("functions.R") # necessary for surface area, volume calculations
+source("body_length_functions.R") # body length resolution, mouth size, Jams model domain
 
 R.ave.water.marine <- 0.77 # average length to width ratio of microplastics in marine environment (Kooi et al. 2021)
 R.ave.water.freshwater <- 0.67
@@ -815,7 +816,7 @@ aoc_setup$doi <- gsub('doi.org/','',aoc_setup$doi)
 aoc_setup$doi <- gsub('https://','',aoc_setup$doi)
 
 aoc_setup <- aoc_setup %>%
-  select(all_of(c(names, "mouth.size.reported", "max.size.ingest.mm"))) #If this throws an error, aoc_setup doesn't have all the column names as tomex2.0 df
+  select(all_of(c(names, "mouth.size.reported", "max.size.ingest.mm", "body.size.source"))) #If this throws an error, aoc_setup doesn't have all the column names as tomex2.0 df
 
 #Join rows
 tomex2.0_aoc_setup_final <- bind_rows(aoc_setup, tomex2.0_aoc_setup) %>% 
@@ -834,10 +835,11 @@ bodysize_summary <- readRDS("aoc_setup.RDS") %>%
   filter(!(species_f == "Oryzias melastigma" & body.length.cm %in% c(2.1, 2.2)))
 
 #Grab table of additional body size data to add to database
-bodysize_addons <- read_csv("gape_size.csv") %>% 
-  mutate(species_f = as.factor(species_f)) 
-#add life stage column
-bodysize_addons$life_f <- as.factor("Adult")
+#(gape_size.csv: species x life-stage reference lengths, plus optional ingestion-size overrides)
+gape_lookup <- read_csv("gape_size.csv", show_col_types = FALSE)
+bodysize_addons <- gape_lookup %>% 
+  transmute(species_f = as.factor(species_f), life_f = as.factor(life.stage),
+            body.length.cm, body.size.source)
 
 #Join body sizes to be added together
 bodysize_summary <- bind_rows(bodysize_summary, bodysize_addons)
@@ -849,8 +851,16 @@ bodysize_summary <- bodysize_summary[!duplicated(bodysize_summary), ]
 dupes <- duplicated(bodysize_summary[,c("species_f", "life_f")])
 bodysize_summary[dupes,]
 
+#remember which records carried their own body length, and which are ToMEx 1.0
+tomex2.0_aoc_setup_final <- tomex2.0_aoc_setup_final %>% 
+  mutate(.record_length = !is.na(body.length.cm),
+         .tomex1 = source != "ToMEx 2.0")
+
 #if there is a value for body size in the tomex2.0 database, mark it as "reported"
-tomex2.0_aoc_setup_final$body.size.source <- ifelse(!is.na(tomex2.0_aoc_setup_final$body.length.cm), "reported", NA)
+#(keep the ToMEx 1.0 sources, e.g., fishbase.org or "study"; they were previously overwritten)
+tomex2.0_aoc_setup_final$body.size.source <- ifelse(is.na(tomex2.0_aoc_setup_final$body.size.source) &
+                                                      !is.na(tomex2.0_aoc_setup_final$body.length.cm),
+                                                    "reported", as.character(tomex2.0_aoc_setup_final$body.size.source))
 
 tomex2.0_aoc_setup_final <- tomex2.0_aoc_setup_final %>% 
   left_join(bodysize_summary, by = join_by(species_f, life_f)) %>% 
@@ -908,28 +918,37 @@ tomex2.0_aoc_setup_final$life_f =
 
 tomex2.0_aoc_setup_final$life_f = fct_na_value_to_level(tomex2.0_aoc_setup_final$life_f, "Not Reported")
 
-#### Maximum ingestible size (mouth size) ####
-#Use a reported value whenever there is one: the record's own, else one reported for the
-#same species / life stage (ToMEx 1.0 / Koelmans et al. 2020). Only when none is reported,
-#estimate it from body length (Jams et al. 2020):
-#log10(mouth, mm) = 0.9341 * log10(body length, mm) - 1.12
-#Previously every value was recomputed from body length, which overwrote the reported
-#ToMEx 1.0 mouth sizes for 13 species / life stages (e.g., Danio rerio 0.4 mm -> 1.53 mm).
-reported_gape <- tomex2.0_aoc_setup_final %>% 
-  filter(mouth.size.reported) %>% 
-  group_by(species_f, life_f) %>% 
-  summarise(max.size.ingest.mm.reported = first(max.size.ingest.mm), .groups = "drop")
+#### Body length and maximum ingestible size (mouth size) ####
+#See body_length_functions.R. Body length: row-level corrections (body_length_measured.csv),
+#then the record's own value, then the species x life-stage reference joined above; never a
+#default size. Mouth size: reported (record, else species x life stage), then an override from
+#gape_size.csv, then the Jams et al. (2020) prediction, else unresolved (excluded from food
+#dilution downstream). Previously every mouth size was recomputed from body length, which
+#overwrote the reported ToMEx 1.0 values (Koelmans et al. 2020) for 13 species / life stages.
+
+#DOI typo in the database (Kaposi et al. 2014)
+tomex2.0_aoc_setup_final <- tomex2.0_aoc_setup_final %>% 
+  mutate(doi = ifelse(doi == "0.1021/es404295e", "10.1021/es404295e", doi))
 
 tomex2.0_aoc_setup_final <- tomex2.0_aoc_setup_final %>% 
-  left_join(reported_gape, by = c("species_f", "life_f")) %>% 
-  mutate(max.size.ingest.mm = case_when(
-           mouth.size.reported ~ max.size.ingest.mm, #reported for this record
-           !is.na(max.size.ingest.mm.reported) ~ max.size.ingest.mm.reported, #reported for species / life stage
-           !is.na(body.length.cm) & body.length.cm > 0 ~
-             10^(0.9341 * log10(body.length.cm * 10) - 1.1200), #estimated (cm to mm)
-           TRUE ~ NA_real_),
-         max.size.ingest.um = 1000 * max.size.ingest.mm) %>% 
-  select(-c(max.size.ingest.mm.reported, mouth.size.reported))
+  apply_body_length_measured(read_body_length_measured("body_length_measured.csv"))
+tomex2.0_aoc_setup_final <- classify_body_length_basis(tomex2.0_aoc_setup_final,
+                                                       record_length = tomex2.0_aoc_setup_final$.record_length,
+                                                       tomex1 = tomex2.0_aoc_setup_final$.tomex1) %>% 
+  select(-c(.record_length, .tomex1))
+
+tomex2.0_aoc_setup_final <- assign_max_size_ingest(tomex2.0_aoc_setup_final,
+                                                   beta_log10_body_length = 0.9341,
+                                                   body_length_intercept = 1.1200,
+                                                   overrides = gape_lookup %>% 
+                                                     transmute(species_f, life_f = life.stage,
+                                                               max.size.ingest.override.um))
+
+#report (do not default) test organisms with no resolved size; strict = TRUE stops the build
+report_unresolved_body_length(tomex2.0_aoc_setup_final,
+                              path = "ToMEx2.0_Onboarding/unresolved_body_length.csv",
+                              strict = FALSE)
+warn_jams_domain(tomex2.0_aoc_setup_final)
 
 #sex
 tomex2.0_aoc_setup_final$sex = fct_collapse(tomex2.0_aoc_setup_final$sex,
@@ -1190,7 +1209,7 @@ saveRDS(tomex2.0_aoc_endpoint_final, file = "aoc_endpoint_tomex2.RDS")
 ##### AOC SEARCH #####
 
 tomex2.0_aoc_search <- tomex2.0_aoc_setup_final %>% 
-  dplyr::select(source, doi, authors, year, tier_zero_tech_f, tier_zero_risk_f, species_f, org_f, env_f, life_f, vivo_f, sex, body.length.cm, max.size.ingest.mm,
+  dplyr::select(source, doi, authors, year, tier_zero_tech_f, tier_zero_risk_f, species_f, org_f, env_f, life_f, vivo_f, sex, body.length.cm, body.length.basis, max.size.ingest.mm, max.size.ingest.basis, jams_domain,
                 #experimental parameters
                 exp_type_f, exposure.route, mix, negative.control, reference.material, exposure.media, solvent, detergent,
                 media.ph, media.sal.ppt, media.temp, media.temp.min, media.temp.max, exposure.duration.d, `Recovery (Days)`, acute.chronic_f,
@@ -1226,7 +1245,10 @@ tomex2.0_aoc_search_final <- tomex2.0_aoc_search %>%
                 'Risk Assessment "Red Criteria"' = tier_zero_risk_f,'Species' = species_f, 
                 'Organism Group' = org_f, 'Environment' = env_f, 'Life Stage' = life_f, 'In vitro/in vivo' = vivo_f,
                 'Sex' = sex, 'Estimated Body Length (cm)' = body.length.cm, 
-                'Estimated Maximum Ingestible Size (mm)' = max.size.ingest.mm, 'Experiment Type' = exp_type_f,
+                'Body Length Basis' = body.length.basis,
+                'Estimated Maximum Ingestible Size (mm)' = max.size.ingest.mm,
+                'Maximum Ingestible Size Basis' = max.size.ingest.basis,
+                'Body-Length Model Domain (Jams et al. 2020)' = jams_domain, 'Experiment Type' = exp_type_f,
                 'Exposure Route' = exposure.route, 'Particle Mix?' = mix, 'Negative Control' = negative.control, 
                 'Reference Particle' = reference.material, 'Exposure Media' = exposure.media,
                 'Solvent' = solvent, 'Detergent' = detergent, 'pH' = media.ph, 'Salinity (ppt)' = media.sal.ppt, 

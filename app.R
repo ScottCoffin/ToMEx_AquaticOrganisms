@@ -2722,12 +2722,12 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
       ) %>% 
       ### BIOACCESSIBILITY ###
       # define upper size length for bioaccessibility (user-defined) for ingestion (only used if user defines as such
-      mutate(x2M_ingest = case_when(is.na(max.size.ingest.um) ~ x2D_set, 
-                                    max.size.ingest.um < x2D_set ~ max.size.ingest.um,
+      mutate(x2M_ingest = case_when(is.na(max.size.ingest.um) ~ NA_real_, #unknown mouth size: excluded from food dilution (no 5 mm default) 
+                                    max.size.ingest.um <= x2D_set ~ max.size.ingest.um,
                                     max.size.ingest.um > x2D_set ~ x2D_set)) %>%  #set to default as upper limit or max size ingest, whichever is smaller
       # define upper size length for Translocation 
       mutate(x2M_trans = case_when(is.na(max.size.ingest.um) ~ upper.tissue.trans.size.um, 
-                                   max.size.ingest.um  < upper.tissue.trans.size.um ~  max.size.ingest.um,
+                                   max.size.ingest.um  <= upper.tissue.trans.size.um ~  max.size.ingest.um,
                                    max.size.ingest.um  > upper.tissue.trans.size.um ~ upper.tissue.trans.size.um)) %>% 
       #define which bioaccessibility limit to use for calculations based on user input
       mutate(ingestion.translocation = ingestion.translocation.switch) %>%  #user-defined bioaccessibility switch. Note that a
@@ -4991,12 +4991,12 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
              ) %>% 
       ### BIOACCESSIBILITY ###
       # define upper size length for bioaccessibility (user-defined) for ingestion (only used if user defines as such
-      mutate(x2M_ingest = case_when(is.na(max.size.ingest.um) ~ x2D_set, 
-                                    max.size.ingest.um < x2D_set ~ max.size.ingest.um,
+      mutate(x2M_ingest = case_when(is.na(max.size.ingest.um) ~ NA_real_, #unknown mouth size: excluded from food dilution (no 5 mm default) 
+                                    max.size.ingest.um <= x2D_set ~ max.size.ingest.um,
                                     max.size.ingest.um > x2D_set ~ x2D_set)) %>%  #set to default as upper limit or max size ingest, whichever is smaller
       # define upper size length for Translocation 
       mutate(x2M_trans = case_when(is.na(max.size.ingest.um) ~ upper.tissue.trans.size.um, 
-                                   max.size.ingest.um  < upper.tissue.trans.size.um ~  max.size.ingest.um,
+                                   max.size.ingest.um  <= upper.tissue.trans.size.um ~  max.size.ingest.um,
                                    max.size.ingest.um  > upper.tissue.trans.size.um ~ upper.tissue.trans.size.um)) %>% 
       #define which bioaccessibility limit to use for calculations based on user input
       mutate(ingestion.translocation = ingestion.translocation.switch) %>%  #user-defined bioaccessibility switch. Note that a
@@ -6473,12 +6473,12 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
       
       ### BIOACCESSIBILITY ###
       # define upper size length for bioaccessibility (user-defined) for ingestion (only used if user defines as such
-      mutate(x2M_ingest = case_when(is.na(max.size.ingest.um) ~ x2D_set, 
-                                    max.size.ingest.um < x2D_set ~ max.size.ingest.um,
+      mutate(x2M_ingest = case_when(is.na(max.size.ingest.um) ~ NA_real_, #unknown mouth size: excluded from food dilution (no 5 mm default) 
+                                    max.size.ingest.um <= x2D_set ~ max.size.ingest.um,
                                     max.size.ingest.um > x2D_set ~ x2D_set)) %>%  #set to default as upper limit or max size ingest, whichever is smaller
       # define upper size length for Translocation 
       mutate(x2M_trans = case_when(is.na(max.size.ingest.um) ~ upper.tissue.trans.size.um, 
-                                   max.size.ingest.um  < upper.tissue.trans.size.um ~  max.size.ingest.um,
+                                   max.size.ingest.um  <= upper.tissue.trans.size.um ~  max.size.ingest.um,
                                    max.size.ingest.um  > upper.tissue.trans.size.um ~ upper.tissue.trans.size.um)) %>% 
       #define which bioaccessibility limit to use for calculations based on user input
       mutate(ingestion.translocation = ingestion.translocation.switch) %>%  #user-defined bioaccessibility switch. Note that a
@@ -9274,12 +9274,12 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
       
       ### BIOACCESSIBILITY ###
       # define upper size length for bioaccessibility (user-defined) for ingestion (only used if user defines as such
-      mutate(x2M_ingest = case_when(is.na(max.size.ingest.um) ~ x2D_set, 
-                                    max.size.ingest.um < x2D_set ~ max.size.ingest.um,
+      mutate(x2M_ingest = case_when(is.na(max.size.ingest.um) ~ NA_real_, #unknown mouth size: excluded from food dilution (no 5 mm default) 
+                                    max.size.ingest.um <= x2D_set ~ max.size.ingest.um,
                                     max.size.ingest.um > x2D_set ~ x2D_set)) %>%  #set to default as upper limit or max size ingest, whichever is smaller
       # define upper size length for Translocation 
       mutate(x2M_trans = case_when(is.na(max.size.ingest.um) ~ upper.tissue.trans.size.um, 
-                                   max.size.ingest.um  < upper.tissue.trans.size.um ~  max.size.ingest.um,
+                                   max.size.ingest.um  <= upper.tissue.trans.size.um ~  max.size.ingest.um,
                                    max.size.ingest.um  > upper.tissue.trans.size.um ~ upper.tissue.trans.size.um)) %>% 
       #define which bioaccessibility limit to use for calculations based on user input
       mutate(ingestion.translocation = ingestion.translocation.switch) %>%  #user-defined bioaccessibility switch. Note that a
