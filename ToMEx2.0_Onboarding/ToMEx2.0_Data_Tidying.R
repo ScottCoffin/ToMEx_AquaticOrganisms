@@ -9,6 +9,7 @@ library(readr)
 
 source("functions.R") # necessary for surface area, volume calculations
 source("body_length_functions.R") # body length resolution, mouth size, Jams model domain
+source("vivo_functions.R") # in vitro / in vivo normalization and SSD eligibility
 
 R.ave.water.marine <- 0.77 # average length to width ratio of microplastics in marine environment (Kooi et al. 2021)
 R.ave.water.freshwater <- 0.67
@@ -262,13 +263,9 @@ rename_with(~ gsub(" |[?]|[(]|[)]|-|/|\\^", ".",.x), everything()) %>% ### repla
    #Factor organism group
    mutate(organism.group = factor(organism.group)) %>% 
    rename(org_f = organism.group) %>% 
-   #Factor in vitro in vivo
-   mutate(in.vitro.in.vivo = factor(case_when(
-     in.vitro.in.vivo == "In Vivo" ~ "In Vivo",
-     in.vitro.in.vivo == "In Vitro" ~ "In Vitro",
-     in.vitro.in.vivo == "in vivo" ~ "In Vivo",
-     in.vitro.in.vivo == "in vitro" ~ "In Vivo",
-   ))) %>% 
+   #Factor in vitro in vivo (shared normalizer; previously lowercase "in vitro" was recoded to "In Vivo")
+   mutate(in.vitro.in.vivo = factor(normalize_vivo(in.vitro.in.vivo, doi = doi),
+                                    levels = c("In Vivo", "In Vitro"))) %>% 
    rename(vivo_f = in.vitro.in.vivo) %>%
    #Factor life stage
    mutate(life.stage = factor(life.stage)) %>%  
@@ -926,6 +923,10 @@ tomex2.0_aoc_setup_final$life_f = fct_na_value_to_level(tomex2.0_aoc_setup_final
 #dilution downstream). Previously every mouth size was recomputed from body length, which
 #overwrote the reported ToMEx 1.0 values (Koelmans et al. 2020) for 13 species / life stages.
 
+#record-level corrections of in vitro / in vivo status (vivo_corrections.csv)
+tomex2.0_aoc_setup_final <- apply_vivo_corrections(tomex2.0_aoc_setup_final,
+                                                   read_vivo_corrections("vivo_corrections.csv"))
+
 #DOI typo in the database (Kaposi et al. 2014)
 tomex2.0_aoc_setup_final <- tomex2.0_aoc_setup_final %>% 
   mutate(doi = ifelse(doi == "0.1021/es404295e", "10.1021/es404295e", doi))
@@ -949,6 +950,10 @@ report_unresolved_body_length(tomex2.0_aoc_setup_final,
                               path = "ToMEx2.0_Onboarding/unresolved_body_length.csv",
                               strict = FALSE)
 warn_jams_domain(tomex2.0_aoc_setup_final)
+
+#SSD eligibility: in vitro records never reach an SSD (ssd_eligible()); reasons are kept per record
+tomex2.0_aoc_setup_final$ssd_exclusion_reason <- ssd_exclusion_reason(tomex2.0_aoc_setup_final)
+report_excluded_in_vitro(tomex2.0_aoc_setup_final, path = "ToMEx2.0_Onboarding/excluded_in_vitro.csv")
 
 #sex
 tomex2.0_aoc_setup_final$sex = fct_collapse(tomex2.0_aoc_setup_final$sex,

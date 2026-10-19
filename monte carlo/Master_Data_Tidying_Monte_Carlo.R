@@ -16,6 +16,7 @@ body_length_intercept <- 1.1200
 
 ### --- LOAD FUNCTIONS --- ###
 # each script is now a function. Source files to load functions #
+source("vivo_functions.R") #in vitro / in vivo normalization and ssd_eligible()
 source("monte carlo/RDAmaker_functions.R") #get ToMEx1.0 fxn
 source("monte carlo/ToMEx2.0_Data_Tidying_functions.R")  #generated tomex2.0 df from individual excel files
 saveRDS(tomex2.0, "monte carlo/ref data/tomex2_input.rds") #necessary to save to port to ecoTox risk repo

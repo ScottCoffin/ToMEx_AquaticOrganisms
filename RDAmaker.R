@@ -4,6 +4,7 @@
 library(tidyverse) #General everything
 
 source("functions.R") # necessary for surface area, volume calculations
+source("vivo_functions.R") # in vitro / in vivo normalization
 
 R.ave.water.marine <- 0.77 # average length to width ratio of microplastics in marine environment (Kooi et al. 2021)
 R.ave.water.freshwater <- 0.67
@@ -647,8 +648,7 @@ aoc_setup <- aoc_v1 %>% # start with original dataset
     bio.org == "tissue" ~ "Tissue",
     bio.org == "organism"~"Organism",
     bio.org == "population"~ "Population")))%>%
-  mutate(vivo_f = factor(case_when(invitro.invivo == "invivo"~"In Vivo",
-                                   invitro.invivo == "invitro"~"In Vitro")))%>% ##Renames for widget (Not using a widget right now, but saving for human health database)
+  mutate(vivo_f = factor(normalize_vivo(invitro.invivo, doi = doi), levels = c("In Vivo", "In Vitro")))%>% ##shared normalizer (vivo_functions.R); unknown values error
   mutate(life_f = factor(case_when(life.stage == "Early"~"Early",
                                    life.stage == "Juvenile"~"Juvenile",
                                    life.stage == "Adult"~"Adult",

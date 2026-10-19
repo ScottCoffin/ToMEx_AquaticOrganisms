@@ -5,6 +5,7 @@
 #### Setup ####
 # Load functions
 source("functions.R")
+source("vivo_functions.R") # ssd_eligible(): in vitro records never reach an SSD
 # custom fxn to check and install the required ver of ssdtools
 check_and_install_version("ssdtools", "0.3.7")
 library(ssdtools)
@@ -53,6 +54,11 @@ aoc_search <- readRDS("aoc_search_tomex2.RDS")
 aoc_setup <- readRDS("aoc_setup_tomex2.RDS") %>% mutate(Group = org_f)
 # aoc_v1 <- readRDS("aoc_v1.RDS")
 aoc_z <- readRDS("aoc_z_tomex2.RDS")
+# in vitro (and status-missing) records are excluded from every SSD; counted for the SSD tab note
+ssd_excluded_in_vitro <- report_excluded_in_vitro(aoc_z)
+ssd_vivo_note <- sprintf(paste0("SSDs use in vivo data only: %d in vitro record(s) from %d species ",
+                                "are excluded from every SSD, whatever the selections above."),
+                         sum(ssd_excluded_in_vitro$n_rows), length(unique(ssd_excluded_in_vitro$species_f)))
 
 # aoc_setup <- aoc_setup %>%
 #  filter(doi != "10.1016/j.marpolbul.2021.112369") %>%
@@ -1366,6 +1372,9 @@ tabItem(tabName = "SSD",
             ) #close tabpanel  
             ), #closes out tabbox
             ), #closes out fluidrow
+            
+            column(width = 12,
+                   helpText(ssd_vivo_note)),
             
             column(width = 3,
                    actionButton("SSDgo", "Submit Current Selection", icon("rocket"), style="color: #fff; background-color:  #117a65; border-color:  #0e6655")),
@@ -6368,6 +6377,7 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
       #                             (AF.time_r_ssd == "Yes" & AF.noec_r_ssd == "No") ~ (dose_new / af.time),
       #                             (AF.time_r_ssd == "No" & AF.noec_r_ssd == "Yes") ~ (dose_new / af.noec),
       #                             (AF.time_r_ssd == "No" & AF.noec_r_ssd == "No") ~ dose_new)) %>% # adjust for assessment factors based on user input
+      ssd_eligible() %>% #in vivo only (vivo_functions.R); not user-selectable
       dplyr::filter(exp_type_f %in% exp_type_c_ssd) %>%
       dplyr::filter(env_f %in% env_c_ssd) %>% #filter by environment inputs
       dplyr::filter(Group %in% Group_c_ssd) %>% # filter by organism inputs
@@ -7841,6 +7851,7 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
                                   (AF.time_r_ssd == "No" & AF.noec_r_ssd == "Yes") ~ (af.noec),
                                   (AF.time_r_ssd == "No" & AF.noec_r_ssd == "No") ~ 1)) %>% 
       mutate(dose_new = dose_new / AF.total) %>% 
+      ssd_eligible() %>% #in vivo only (vivo_functions.R); not user-selectable
       dplyr::filter(exp_type_f %in% exp_type_c_ssd) %>%
       dplyr::filter(env_f %in% env_c_ssd) %>% #filter by environment inputs
       dplyr::filter(Group %in% Group_c_ssd) %>% # filter by organism inputs

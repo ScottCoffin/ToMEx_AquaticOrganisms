@@ -187,12 +187,17 @@ report_unresolved_body_length <- function(df, path = NULL, strict = FALSE,
   u <- df[is.na(df$max.size.ingest.mm) & !as.character(group) %in% not_applicable, ]
   if (nrow(u) == 0) return(invisible(u))
   summary <- u %>%
-    mutate(Group = if ("org_f" %in% names(u)) org_f else Group) %>%
-    count(doi, species_f, life_f, Group, name = "n_rows")
+    mutate(Group = if ("org_f" %in% names(u)) org_f else Group,
+           reason = if ("vivo_f" %in% names(u)) {
+             ifelse(as.character(vivo_f) %in% "In Vitro", "in vitro: not applicable", "unresolved")
+           } else "unresolved") %>%
+    count(doi, species_f, life_f, Group, reason, name = "n_rows")
+  n_unresolved <- sum(summary$n_rows[summary$reason == "unresolved"])
   if (!is.null(path)) readr::write_csv(summary, path)
+  if (n_unresolved == 0) return(invisible(summary))
   msg <- sprintf(paste0("%d test rows (%d species) have no resolved body length or mouth size; ",
                         "they are excluded from food dilution.%s"),
-                 nrow(u), dplyr::n_distinct(u$species_f),
+                 n_unresolved, dplyr::n_distinct(summary$species_f[summary$reason == "unresolved"]),
                  if (!is.null(path)) paste0(" See ", path, ".") else "")
   if (strict) stop(msg, call. = FALSE)
   warning(msg, call. = FALSE)
